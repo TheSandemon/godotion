@@ -48,8 +48,9 @@ func _edit(object: Object) -> void:
 	if object is MotionPlayer:
 		_panel.edit_player(object)
 	elif object is MotionTimeline:
-		_panel.edit_player(null)
-		_panel.set_timeline(object)
+		# Selecting the timeline sub-resource in the inspector must not unbind
+		# the player it belongs to — Add Track and Key both need its root_node.
+		_panel.edit_timeline(object)
 
 
 func _make_visible(visible: bool) -> void:

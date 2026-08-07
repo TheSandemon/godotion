@@ -37,15 +37,43 @@ enum LoopMode {
 		loop_mode = v
 		emit_changed()
 
+## May contain [code]null[/code] holes: adding an element in the inspector
+## creates an empty slot before the user assigns a resource to it. Read through
+## [method get_valid_tracks] rather than iterating this directly.
 @export var tracks: Array[MotionTrack] = []:
 	set(v):
 		tracks = v
-		emit_changed()
+		_rebuild_valid_tracks()
+
+## Null-free view of [member tracks].
+var _valid_tracks: Array[MotionTrack] = []
+
+
+## Null-free tracks. Always read through this rather than [member tracks].
+func get_valid_tracks() -> Array[MotionTrack]:
+	return _valid_tracks
+
+
+## Refreshes the null-free view and re-subscribes to each track's [signal
+## Resource.changed], so edits made in the inspector propagate up to the panel.
+func _rebuild_valid_tracks() -> void:
+	_valid_tracks = []
+	for track in tracks:
+		if track == null:
+			continue
+		_valid_tracks.append(track)
+		if not track.changed.is_connected(_on_track_changed):
+			track.changed.connect(_on_track_changed)
+	emit_changed()
+
+
+func _on_track_changed() -> void:
+	emit_changed()
 
 
 func add_track(track: MotionTrack) -> int:
 	tracks.append(track)
-	emit_changed()
+	_rebuild_valid_tracks()
 	return tracks.size() - 1
 
 
@@ -54,12 +82,14 @@ func remove_track(track: MotionTrack) -> bool:
 	if idx < 0:
 		return false
 	tracks.remove_at(idx)
-	emit_changed()
+	if track.changed.is_connected(_on_track_changed):
+		track.changed.disconnect(_on_track_changed)
+	_rebuild_valid_tracks()
 	return true
 
 
 func find_track(node_path: NodePath, property: String) -> MotionTrack:
-	for track in tracks:
+	for track in _valid_tracks:
 		if track.node_path == node_path and track.property == property:
 			return track
 	return null
@@ -81,7 +111,7 @@ func get_or_create_track(node_path: NodePath, property: String) -> MotionTrack:
 ## Longest keyed time across all tracks, ignoring [member duration].
 func get_keyed_length() -> float:
 	var longest := 0.0
-	for track in tracks:
+	for track in _valid_tracks:
 		longest = maxf(longest, track.get_length())
 	return longest
 

@@ -41,6 +41,10 @@ enum Kind {
 
 ## Time-sorted keys. Prefer [method add_key] over mutating this directly so the
 ## ordering invariant holds.
+##
+## May contain [code]null[/code] holes: adding an element in the inspector
+## creates an empty slot before the user assigns a resource to it. Read through
+## [method get_valid_keys] rather than iterating this directly.
 @export var keys: Array[MotionKey] = []:
 	set(v):
 		keys = v
@@ -54,6 +58,9 @@ enum Kind {
 		emit_changed()
 
 var _kind_cache: int = -1
+## Null-free, time-sorted view of [member keys], rebuilt on every mutation so
+## sampling never pays for filtering.
+var _valid_keys: Array[MotionKey] = []
 
 
 ## Returns a [enum Kind] value. Typed as [int] because GDScript rejects casting
@@ -89,10 +96,31 @@ func get_display_name() -> String:
 	return node_name
 
 
-## Keeps [member keys] ordered by time. Called automatically by the mutators.
+## Null-free, time-sorted keys. Always read through this rather than
+## [member keys], which may contain inspector-created holes.
+func get_valid_keys() -> Array[MotionKey]:
+	return _valid_keys
+
+
+## Keeps [member keys] ordered by time and refreshes the null-free view.
+## Called automatically by the mutators.
 func sort_keys() -> void:
-	keys.sort_custom(func(a: MotionKey, b: MotionKey) -> bool: return a.time < b.time)
+	keys.sort_custom(_compare_keys)
+	_valid_keys = []
+	for key in keys:
+		if key != null:
+			_valid_keys.append(key)
 	emit_changed()
+
+
+## Sorts by time, with null holes pushed to the end so they never get
+## dereferenced mid-sort.
+static func _compare_keys(a: MotionKey, b: MotionKey) -> bool:
+	if a == null:
+		return false
+	if b == null:
+		return true
+	return a.time < b.time
 
 
 func add_key(key: MotionKey) -> int:
@@ -119,7 +147,7 @@ func set_key(time: float, value: Variant, interp: int = MotionKey.Interp.LINEAR,
 
 
 func find_key_at(time: float, epsilon: float = 0.0005) -> MotionKey:
-	for key in keys:
+	for key in _valid_keys:
 		if absf(key.time - time) <= epsilon:
 			return key
 	return null
@@ -135,25 +163,25 @@ func remove_key(key: MotionKey) -> bool:
 
 
 func get_length() -> float:
-	if keys.is_empty():
+	if _valid_keys.is_empty():
 		return 0.0
-	return keys[keys.size() - 1].time
+	return _valid_keys[_valid_keys.size() - 1].time
 
 
 ## Samples the track. Returns [code]null[/code] when the track has no keys, so
 ## callers can distinguish "no opinion" from a keyed [code]0[/code].
 func sample(time: float) -> Variant:
-	if keys.is_empty():
+	if _valid_keys.is_empty():
 		return null
-	if keys.size() == 1 or time <= keys[0].time:
-		return keys[0].value
-	var last := keys[keys.size() - 1]
+	if _valid_keys.size() == 1 or time <= _valid_keys[0].time:
+		return _valid_keys[0].value
+	var last := _valid_keys[_valid_keys.size() - 1]
 	if time >= last.time:
 		return last.value
 
 	var idx := _segment_index(time)
-	var from_key := keys[idx]
-	var to_key := keys[idx + 1]
+	var from_key := _valid_keys[idx]
+	var to_key := _valid_keys[idx + 1]
 	var span := to_key.time - from_key.time
 	if span <= 0.0:
 		return to_key.value
@@ -172,10 +200,10 @@ func sample(time: float) -> Variant:
 ## Binary search for the key index whose segment contains [param time].
 func _segment_index(time: float) -> int:
 	var low := 0
-	var high := keys.size() - 1
+	var high := _valid_keys.size() - 1
 	while low < high - 1:
 		var mid := (low + high) / 2
-		if keys[mid].time <= time:
+		if _valid_keys[mid].time <= time:
 			low = mid
 		else:
 			high = mid
@@ -216,7 +244,7 @@ func duplicate_track() -> MotionTrack:
 	copy.enabled = enabled
 	copy.kind_override = kind_override
 	var new_keys: Array[MotionKey] = []
-	for key in keys:
+	for key in _valid_keys:
 		new_keys.append(key.duplicate_key())
 	copy.keys = new_keys
 	return copy

@@ -127,7 +127,7 @@ func apply_at(time: float) -> void:
 	if root == null:
 		return
 	var local_time := timeline.wrap_time(time)
-	for track in timeline.tracks:
+	for track in timeline.get_valid_tracks():
 		if not track.enabled or track.property.is_empty():
 			continue
 		var value: Variant = track.sample(local_time)
@@ -188,7 +188,7 @@ func _get_configuration_warnings() -> PackedStringArray:
 	var warnings := PackedStringArray()
 	if timeline == null:
 		warnings.append("Assign a MotionTimeline resource to animate anything.")
-	elif timeline.tracks.is_empty():
+	elif timeline.get_valid_tracks().is_empty():
 		warnings.append("The assigned MotionTimeline has no tracks yet.")
 	if root_node.is_empty():
 		warnings.append("root_node is empty; animated node paths will resolve against the MotionPlayer itself.")

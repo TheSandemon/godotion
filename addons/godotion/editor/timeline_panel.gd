@@ -174,6 +174,17 @@ func edit_player(player: MotionPlayer) -> void:
 	_refresh_controls()
 
 
+## Binds a timeline that was selected directly (e.g. the sub-resource in the
+## inspector). Keeps the current player if the timeline belongs to it, so the
+## panel does not lose the root it needs to add tracks and read values.
+func edit_timeline(timeline: MotionTimeline) -> void:
+	if _player == null or not is_instance_valid(_player) or _player.timeline != timeline:
+		_player = null
+	set_timeline(timeline)
+	_canvas.root_node = _resolve_root()
+	_refresh_controls()
+
+
 func set_timeline(timeline: MotionTimeline) -> void:
 	if _timeline == timeline:
 		return
@@ -191,10 +202,16 @@ func get_timeline() -> MotionTimeline:
 	return _timeline
 
 
+## The node that track paths are relative to. Falls back to the edited scene
+## root when no player is bound, so a timeline opened on its own is still
+## editable.
 func _resolve_root() -> Node:
-	if _player == null:
-		return null
-	return _player.get_node_or_null(_player.root_node)
+	if _player == null or not is_instance_valid(_player):
+		return EditorInterface.get_edited_scene_root()
+	if _player.root_node.is_empty():
+		return _player
+	var root := _player.get_node_or_null(_player.root_node)
+	return root if root != null else EditorInterface.get_edited_scene_root()
 
 
 func _refresh_controls() -> void:
@@ -202,7 +219,7 @@ func _refresh_controls() -> void:
 	var has_selection := has_timeline and not _canvas.get_selection().is_empty()
 	_play_button.disabled = not has_timeline or _player == null
 	_stop_button.disabled = _play_button.disabled
-	_key_button.disabled = not has_timeline or _timeline.tracks.is_empty()
+	_key_button.disabled = not has_timeline or _timeline.get_valid_tracks().is_empty()
 	_add_track_button.disabled = not has_timeline
 	_delete_button.disabled = not has_selection
 	_duration_spin.editable = has_timeline
@@ -307,12 +324,12 @@ func _on_key_pressed() -> void:
 		return
 	var root := _resolve_root()
 	if root == null:
-		push_warning("Godotion: cannot key — the MotionPlayer's root_node does not resolve.")
+		push_warning("Godotion: cannot key — no scene root resolved.")
 		return
 	var time: float = _timeline.snap_to_frame(_canvas.playhead)
 	var created: Array[MotionKey] = []
 	var owners: Array[MotionTrack] = []
-	for track in _timeline.tracks:
+	for track in _timeline.get_valid_tracks():
 		if not track.enabled or track.property.is_empty():
 			continue
 		var node: Node = root if track.node_path.is_empty() else root.get_node_or_null(track.node_path)
@@ -381,7 +398,7 @@ func _on_add_track_pressed() -> void:
 		return
 	var root := _resolve_root()
 	if root == null:
-		push_warning("Godotion: assign a valid root_node on the MotionPlayer first.")
+		push_warning("Godotion: no scene root to add tracks against. Open a scene, or set a valid root_node on the MotionPlayer.")
 		return
 	_pending_nodes = []
 	for node in EditorInterface.get_selection().get_selected_nodes():

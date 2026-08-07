@@ -27,7 +27,14 @@ const MAX_PPS := 2000.0
 
 var timeline: MotionTimeline:
 	set(v):
+		if timeline == v:
+			return
+		if timeline != null and timeline.changed.is_connected(queue_redraw):
+			timeline.changed.disconnect(queue_redraw)
 		timeline = v
+		# Repaint on any inspector-side edit to the timeline or its tracks.
+		if timeline != null:
+			timeline.changed.connect(queue_redraw)
 		clear_selection()
 		queue_redraw()
 
@@ -82,8 +89,15 @@ func row_y(index: int) -> float:
 	return RULER_H + index * ROW_H - v_offset
 
 
+## Rows map to the null-free track view, never to raw indices into
+## [member MotionTimeline.tracks].
+func _rows() -> Array[MotionTrack]:
+	var empty: Array[MotionTrack] = []
+	return empty if timeline == null else timeline.get_valid_tracks()
+
+
 func _visible_track_count() -> int:
-	return 0 if timeline == null else timeline.tracks.size()
+	return _rows().size()
 
 
 func _content_height() -> float:
@@ -210,8 +224,9 @@ func _format_time(t: float) -> String:
 
 
 func _draw_tracks(font: Font, fsize: int, text_col: Color, line_col: Color) -> void:
-	for i in range(timeline.tracks.size()):
-		var track: MotionTrack = timeline.tracks[i]
+	var rows := _rows()
+	for i in range(rows.size()):
+		var track: MotionTrack = rows[i]
 		var y := row_y(i)
 		if y + ROW_H < RULER_H or y > size.y:
 			continue
@@ -221,15 +236,16 @@ func _draw_tracks(font: Font, fsize: int, text_col: Color, line_col: Color) -> v
 		var mid := y + ROW_H * 0.5
 
 		# Span bar between the first and last key.
-		if track.keys.size() > 1:
-			var x0 := time_to_x(track.keys[0].time)
-			var x1 := time_to_x(track.keys[track.keys.size() - 1].time)
+		var track_keys := track.get_valid_keys()
+		if track_keys.size() > 1:
+			var x0 := time_to_x(track_keys[0].time)
+			var x1 := time_to_x(track_keys[track_keys.size() - 1].time)
 			var from_x := maxf(x0, GUTTER_W)
 			var to_x := minf(x1, size.x)
 			if to_x > from_x:
 				draw_line(Vector2(from_x, mid), Vector2(to_x, mid), Color(accent, 0.45), 2.0)
 
-		for key in track.keys:
+		for key in track_keys:
 			var x := time_to_x(key.time)
 			if x < GUTTER_W - KEY_RADIUS or x > size.x + KEY_RADIUS:
 				continue
@@ -265,8 +281,9 @@ func _draw_gutter(font: Font, fsize: int, text_col: Color, gutter_bg: Color, lin
 	if timeline == null:
 		return
 
-	for i in range(timeline.tracks.size()):
-		var track: MotionTrack = timeline.tracks[i]
+	var rows := _rows()
+	for i in range(rows.size()):
+		var track: MotionTrack = rows[i]
 		var y := row_y(i)
 		if y + ROW_H < RULER_H or y > size.y:
 			continue
@@ -321,7 +338,7 @@ func _row_at(pos: Vector2) -> int:
 	if pos.y < RULER_H or timeline == null:
 		return -1
 	var index := int((pos.y + v_offset - RULER_H) / ROW_H)
-	if index < 0 or index >= timeline.tracks.size():
+	if index < 0 or index >= _rows().size():
 		return -1
 	return index
 
@@ -330,13 +347,13 @@ func _key_at(pos: Vector2) -> Dictionary:
 	var row := _row_at(pos)
 	if row < 0 or pos.x < GUTTER_W:
 		return {}
-	var track: MotionTrack = timeline.tracks[row]
+	var track: MotionTrack = _rows()[row]
 	var mid := row_y(row) + ROW_H * 0.5
 	if absf(pos.y - mid) > KEY_RADIUS + 3.0:
 		return {}
 	var best: MotionKey = null
 	var best_dist := KEY_RADIUS + 4.0
-	for key in track.keys:
+	for key in track.get_valid_keys():
 		var dist := absf(time_to_x(key.time) - pos.x)
 		if dist < best_dist:
 			best_dist = dist
@@ -348,7 +365,7 @@ func _key_at(pos: Vector2) -> Dictionary:
 
 func get_track_at(pos: Vector2) -> MotionTrack:
 	var row := _row_at(pos)
-	return null if row < 0 else timeline.tracks[row]
+	return null if row < 0 else _rows()[row]
 
 
 # -- input --------------------------------------------------------------------
@@ -405,12 +422,12 @@ func _handle_button(event: InputEventMouseButton) -> void:
 	if pos.x < GUTTER_W:
 		var row := _row_at(pos)
 		if row >= 0:
-			var track: MotionTrack = timeline.tracks[row]
+			var track: MotionTrack = _rows()[row]
 			if pos.x >= 6.0 and pos.x <= 22.0:
 				track_enable_toggled.emit(track, not track.enabled)
 			else:
 				_selection.clear()
-				for key in track.keys:
+				for key in track.get_valid_keys():
 					_selection.append({"track": track, "key": key})
 				selection_changed.emit()
 			queue_redraw()

@@ -19,6 +19,7 @@ func _initialize() -> void:
 	_test_interpolation_types()
 	_test_track_kinds()
 	_test_timeline_time()
+	_test_null_holes()
 	_test_player_applies_to_scene()
 
 	print("")
@@ -173,6 +174,65 @@ func _test_timeline_time() -> void:
 	# duration has a floor so wrap_time can never divide by zero.
 	timeline.duration = -5.0
 	_check(timeline.duration > 0.0, "duration clamps positive")
+
+
+## Regression: adding an element to `tracks` or `keys` in the inspector creates
+## a null slot before the user assigns a resource. Every read path must survive
+## that, because the panel redraws on the very next frame.
+func _test_null_holes() -> void:
+	var timeline := MotionTimeline.new()
+	var real := MotionTrack.new()
+	real.property = "position:x"
+	real.set_key(0.0, 0.0)
+	real.set_key(1.0, 10.0)
+
+	# Mirrors the inspector: [null, track, null].
+	var holed: Array[MotionTrack] = [null, real, null]
+	timeline.tracks = holed
+
+	_check(timeline.get_valid_tracks().size() == 1, "null tracks filtered from view")
+	_check(timeline.get_valid_tracks()[0] == real, "surviving track is the real one")
+	_check(timeline.tracks.size() == 3, "raw array keeps the holes for the inspector")
+	_close(timeline.get_keyed_length(), 1.0, "keyed length skips nulls")
+	_check(timeline.find_track(real.node_path, "position:x") == real, "find_track skips nulls")
+
+	var track := MotionTrack.new()
+	var key_a := MotionKey.new()
+	key_a.time = 1.0
+	key_a.value = 100.0
+	var key_b := MotionKey.new()
+	key_b.time = 0.0
+	key_b.value = 0.0
+	# Unsorted, with holes on both ends — the sort comparator must not deref null.
+	var holed_keys: Array[MotionKey] = [null, key_a, null, key_b, null]
+	track.keys = holed_keys
+
+	_check(track.get_valid_keys().size() == 2, "null keys filtered from view")
+	_check(track.get_valid_keys()[0] == key_b, "valid keys are time-sorted")
+	_close(track.get_length(), 1.0, "length ignores nulls")
+	_close(track.sample(0.5), 50.0, "sampling works through holes")
+	_check(track.find_key_at(1.0) == key_a, "find_key_at skips nulls")
+
+	# A track that is nothing but holes must behave like an empty track.
+	var all_null := MotionTrack.new()
+	var only_holes: Array[MotionKey] = [null, null]
+	all_null.keys = only_holes
+	_check(all_null.sample(0.5) == null, "all-null track samples null")
+	_close(all_null.get_length(), 0.0, "all-null track has zero length")
+
+	# The player must skip null tracks rather than crash mid-apply.
+	var player := MotionPlayer.new()
+	get_root().add_child(player)
+	player.timeline = timeline
+	player.apply_at(0.5)
+	_check(true, "player survives null tracks")
+	player.queue_free()
+
+	# Track edits must propagate up so the panel repaints.
+	var notified := [false]
+	timeline.changed.connect(func() -> void: notified[0] = true)
+	real.set_key(0.5, 5.0)
+	_check(notified[0], "track changes propagate to the timeline")
 
 
 func _test_player_applies_to_scene() -> void:

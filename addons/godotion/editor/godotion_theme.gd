@@ -32,6 +32,8 @@ const KIND_NAMES := {
 
 
 static func accent_for(track: MotionTrack) -> Color:
+	if track == null:
+		return ACCENTS[MotionTrack.Kind.CUSTOM]
 	return ACCENTS.get(track.get_kind(), ACCENTS[MotionTrack.Kind.CUSTOM])
 
 
