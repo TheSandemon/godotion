@@ -34,11 +34,15 @@ small demo scene under `demo/`.
    property. Set `Root Node` to the node your animated nodes live under
    (defaults to the MotionPlayer's parent).
 3. Select the MotionPlayer — the Godotion panel binds to it.
-4. Select one or more nodes in the scene tree, press **Add Track**, and pick a
-   property. Vector and color components are offered individually, so you can
-   key `position:x` or `modulate:a` on their own.
+4. Press **Add Track**. The dialog shows your scene tree: pick the node to
+   animate (Ctrl-click for several), then pick the property. Vector and color
+   components are listed individually, so you can key `position:x` or
+   `modulate:a` on their own.
 5. Scrub the ruler, pose your nodes in the viewport, and press **Key** to insert
    keyframes at the playhead from the nodes' current values.
+
+If nodes are already selected in the Scene dock when you press **Add Track**,
+the dialog starts on them — but it never requires that.
 
 ### Timeline controls
 

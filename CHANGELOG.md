@@ -6,6 +6,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **Add Track now picks the node itself.** The dialog shows the scene hierarchy
+  with each node's editor icon; multi-select with Ctrl. Previously it silently
+  required a prior Scene dock selection and warned if you had none, with nothing
+  on screen explaining why. A Scene dock selection still seeds the dialog when
+  present, but is no longer required.
+
 ### Added
 
 - Headless test suite (`tests/test_core.gd`) — 61 assertions over easing, the
@@ -14,6 +22,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Null entries created by inspector array editing crashed the panel's draw loop
+  every frame. `MotionTimeline` and `MotionTrack` now expose null-free views
+  (`get_valid_tracks()` / `get_valid_keys()`) while the raw exported arrays keep
+  their holes for the inspector.
+- Selecting a timeline sub-resource in the inspector unbound the MotionPlayer,
+  producing a spurious "assign a valid root_node" warning.
+- Track edits now propagate to the timeline's `changed` signal, so inspector
+  edits repaint the panel.
 - `timeline_panel.gd` failed to parse on Godot 4.7: `_canvas` was typed as
   `Control`, so `:=` could not infer types from dynamic member access. It is now
   typed as the preloaded `TimelineCanvas` script.

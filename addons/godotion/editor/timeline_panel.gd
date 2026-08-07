@@ -34,9 +34,9 @@ var _fps_spin: SpinBox
 var _title_label: Label
 
 var _add_dialog: ConfirmationDialog
+var _node_tree: Tree
 var _property_picker: OptionButton
 var _target_label: Label
-var _pending_nodes: Array[Node] = []
 
 var _previewing := false
 
@@ -147,19 +147,38 @@ func _build_canvas() -> void:
 	_canvas.key_double_clicked.connect(_on_key_double_clicked)
 
 
+## The dialog picks the node itself rather than depending on the Scene dock
+## selection — requiring an invisible prior selection was the single most
+## confusing thing about the first version.
 func _build_add_dialog() -> void:
 	_add_dialog = ConfirmationDialog.new()
 	_add_dialog.title = "Add Motion Track"
 	_add_dialog.ok_button_text = "Add Track"
+
 	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 6)
+
 	_target_label = Label.new()
+	_target_label.text = "Pick a node to animate. Ctrl-click for several."
+	_target_label.add_theme_color_override("font_color", Color(1, 1, 1, 0.6))
 	box.add_child(_target_label)
+
+	_node_tree = Tree.new()
+	_node_tree.select_mode = Tree.SELECT_MULTI
+	_node_tree.hide_root = false
+	_node_tree.custom_minimum_size = Vector2(380, 260)
+	_node_tree.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_node_tree.multi_selected.connect(_on_node_tree_multi_selected)
+	box.add_child(_node_tree)
+
 	var row := HBoxContainer.new()
 	row.add_child(_make_label("Property"))
 	_property_picker = OptionButton.new()
-	_property_picker.custom_minimum_size.x = 260
+	_property_picker.custom_minimum_size.x = 300
+	_property_picker.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(_property_picker)
 	box.add_child(row)
+
 	_add_dialog.add_child(box)
 	_add_dialog.confirmed.connect(_on_add_dialog_confirmed)
 	add_child(_add_dialog)
@@ -400,28 +419,115 @@ func _on_add_track_pressed() -> void:
 	if root == null:
 		push_warning("Godotion: no scene root to add tracks against. Open a scene, or set a valid root_node on the MotionPlayer.")
 		return
-	_pending_nodes = []
+
+	_node_tree.clear()
+	_populate_node_tree(root, null, root)
+
+	# Seed from the Scene dock selection as a convenience, but never require it.
+	var preselected: Array[Node] = []
 	for node in EditorInterface.get_selection().get_selected_nodes():
-		if node == _player:
-			continue
-		if node == root or root.is_ancestor_of(node):
-			_pending_nodes.append(node)
-	if _pending_nodes.is_empty():
-		push_warning("Godotion: select one or more nodes under '%s' in the scene tree." % root.name)
+		if node != _player and (node == root or root.is_ancestor_of(node)):
+			preselected.append(node)
+	if preselected.is_empty() and _node_tree.get_root() != null:
+		var first := _node_tree.get_root().get_first_child()
+		if first != null:
+			first.select(0)
+		else:
+			_node_tree.get_root().select(0)
+	else:
+		for node in preselected:
+			var item := _find_tree_item(root.get_path_to(node))
+			if item != null:
+				item.select(0)
+
+	_refresh_property_picker()
+	_add_dialog.popup_centered(Vector2i(460, 420))
+
+
+## Mirrors the scene hierarchy under [param root], carrying each node's real
+## editor icon. The MotionPlayer itself is skipped — animating the thing driving
+## the animation is never what the user means.
+func _populate_node_tree(node: Node, parent: TreeItem, root: Node) -> void:
+	if node == _player:
 		return
+	var item := _node_tree.create_item(parent)
+	item.set_text(0, node.name)
+	item.set_metadata(0, root.get_path_to(node))
+	var icon := GodotionTheme.icon_for_node(node)
+	if icon != null:
+		item.set_icon(0, icon)
+	if node != root:
+		item.set_tooltip_text(0, String(root.get_path_to(node)))
+	for child in node.get_children():
+		_populate_node_tree(child, item, root)
+
+
+func _find_tree_item(path: NodePath, from: TreeItem = null) -> TreeItem:
+	var item := from if from != null else _node_tree.get_root()
+	if item == null:
+		return null
+	if item.get_metadata(0) == path:
+		return item
+	var child := item.get_first_child()
+	while child != null:
+		var found := _find_tree_item(path, child)
+		if found != null:
+			return found
+		child = child.get_next()
+	return null
+
+
+func _selected_tree_nodes() -> Array[Node]:
+	var out: Array[Node] = []
+	var root := _resolve_root()
+	if root == null:
+		return out
+	var item := _node_tree.get_next_selected(null)
+	while item != null:
+		var path: NodePath = item.get_metadata(0)
+		var node: Node = root if path.is_empty() else root.get_node_or_null(path)
+		if node != null:
+			out.append(node)
+		item = _node_tree.get_next_selected(item)
+	return out
+
+
+func _on_node_tree_multi_selected(_item: TreeItem, _column: int, _selected: bool) -> void:
+	_refresh_property_picker()
+
+
+## Rebuilds the property list from the first selected node, preserving the
+## current choice when the new node also exposes it.
+func _refresh_property_picker() -> void:
+	var previous := ""
+	if _property_picker.selected >= 0:
+		previous = _property_picker.get_item_text(_property_picker.selected)
 
 	_property_picker.clear()
-	for prop in _collect_animatable_properties(_pending_nodes[0]):
+	var nodes := _selected_tree_nodes()
+	if nodes.is_empty():
+		_target_label.text = "Pick a node to animate. Ctrl-click for several."
+		_add_dialog.get_ok_button().disabled = true
+		return
+
+	for prop in _collect_animatable_properties(nodes[0]):
 		_property_picker.add_item(prop)
-	if _property_picker.item_count == 0:
-		push_warning("Godotion: '%s' exposes no animatable properties." % _pending_nodes[0].name)
+		if prop == previous:
+			_property_picker.select(_property_picker.item_count - 1)
+
+	var has_properties := _property_picker.item_count > 0
+	_add_dialog.get_ok_button().disabled = not has_properties
+	if not has_properties:
+		_target_label.text = "'%s' exposes no animatable properties." % nodes[0].name
 		return
 
 	var names := PackedStringArray()
-	for node in _pending_nodes:
+	for node in nodes:
 		names.append(node.name)
-	_target_label.text = "Target: %s" % ", ".join(names)
-	_add_dialog.popup_centered(Vector2i(420, 140))
+	if nodes.size() == 1:
+		_target_label.text = "Target: %s" % names[0]
+	else:
+		_target_label.text = "Targets: %s  (properties from '%s')" % [", ".join(names), names[0]]
 
 
 ## Flattens a node's exported properties into keyable paths, expanding vector
@@ -464,7 +570,13 @@ func _on_add_dialog_confirmed() -> void:
 		return
 
 	var new_tracks: Array[MotionTrack] = []
-	for node in _pending_nodes:
+	var skipped := PackedStringArray()
+	for node in _selected_tree_nodes():
+		# With a multi-node selection the property list comes from the first
+		# node, so the others may not have it.
+		if node.get_indexed(NodePath(property)) == null:
+			skipped.append(node.name)
+			continue
 		var path := root.get_path_to(node)
 		if _timeline.find_track(path, property) != null:
 			continue
@@ -473,6 +585,8 @@ func _on_add_dialog_confirmed() -> void:
 		track.property = property
 		new_tracks.append(track)
 
+	if not skipped.is_empty():
+		push_warning("Godotion: skipped %s — no '%s' property." % [", ".join(skipped), property])
 	if new_tracks.is_empty():
 		return
 	undo_redo.create_action("Godotion: Add Track")
