@@ -6,9 +6,21 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Headless test suite (`tests/test_core.gd`) — 61 assertions over easing, the
+  bezier solver, track sampling, per-type interpolation, kind inference, loop
+  and ping-pong time wrapping, and scene application. CI-usable exit code.
+
+### Fixed
+
+- `timeline_panel.gd` failed to parse on Godot 4.7: `_canvas` was typed as
+  `Control`, so `:=` could not infer types from dynamic member access. It is now
+  typed as the preloaded `TimelineCanvas` script.
+
 ## [0.1.0] — 2026-08-07
 
-Initial scaffold.
+Initial scaffold. Verified against Godot 4.7-stable.
 
 ### Added
 

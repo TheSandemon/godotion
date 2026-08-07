@@ -20,7 +20,7 @@ var undo_redo: EditorUndoRedoManager
 
 var _player: MotionPlayer
 var _timeline: MotionTimeline
-var _canvas: Control
+var _canvas: TimelineCanvas
 
 var _play_button: Button
 var _stop_button: Button

@@ -7,8 +7,8 @@ a drawn timeline that sits in the editor's bottom panel and borrows the editor's
 own icons and theme so it reads as part of Godot rather than bolted onto it.
 
 > **Status: v0.1.0, early.** The data model, runtime player and timeline canvas
-> are implemented and the plugin loads as-is. It has not yet been run against a
-> Godot 4.7 build — see [Version support](#version-support).
+> are implemented. Verified on **Godot 4.7-stable**: clean import, plugin loads,
+> and 61 headless assertions pass over the runtime core.
 
 ## Why not AnimationPlayer?
 
@@ -128,15 +128,28 @@ out of the global class table at runtime.
 
 ## Version support
 
-Written against the Godot 4 plugin API, which has been stable across 4.x. It is
-intended for **Godot 4.7**; the local dev machine has no working 4.7 build yet,
-so it has been verified by review rather than by running the editor. If you hit
-a 4.7-specific issue, please open one.
+Developed and verified against **Godot 4.7-stable**. Written against the Godot 4
+plugin API, which has been stable across the 4.x series, so earlier 4.x should
+work — `config/features` declares `4.4` — but only 4.7 is tested.
+
+## Tests
+
+The runtime core has a headless suite covering easing curves, the bezier solver,
+track sampling and sorting, per-type interpolation, kind inference, loop/ping-pong
+time wrapping, and the player writing into a live scene tree.
+
+```bash
+godot --headless --path . --script res://tests/test_core.gd
+```
+
+Exits non-zero if any assertion fails, so it drops straight into CI. The editor
+UI is not covered — it needs a real editor to drive.
 
 ## Contributing
 
-Issues and PRs welcome. Keep `core/` free of editor dependencies, and route
-every user-facing edit through `EditorUndoRedoManager`.
+Issues and PRs welcome. Keep `core/` free of editor dependencies, route every
+user-facing edit through `EditorUndoRedoManager`, and make sure `test_core.gd`
+still passes.
 
 ## License
 

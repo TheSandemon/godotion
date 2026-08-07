@@ -8,6 +8,10 @@
 /export/
 export_presets.cfg
 
+# Godot editor binaries kept alongside the project
+Godot_v*.exe
+Godot_v*/
+
 # OS / editor cruft
 .DS_Store
 Thumbs.db
