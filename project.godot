@@ -1,0 +1,23 @@
+; Engine configuration file.
+; Godotion — development project for the Godotion editor plugin.
+; The shippable artifact is `addons/godotion/`; everything else here exists to
+; exercise it.
+
+config_version=5
+
+[application]
+
+config/name="Godotion"
+config/description="Motion-graphics timeline editor plugin for Godot 4."
+run/main_scene="res://demo/demo.tscn"
+config/features=PackedStringArray("4.4", "GL Compatibility")
+config/icon="res://addons/godotion/icons/motion_player.svg"
+
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/godotion/plugin.cfg")
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"

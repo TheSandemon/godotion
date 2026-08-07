@@ -1,0 +1,14 @@
+# Godot 4 generated files
+.godot/
+/android/
+*.translation
+
+# Exported builds
+/build/
+/export/
+export_presets.cfg
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.tmp

@@ -1,0 +1,24 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://addons/godotion/core/motion_player.gd" id="1_player"]
+
+[node name="Demo" type="Node2D"]
+
+[node name="Card" type="ColorRect" parent="."]
+offset_left = 220.0
+offset_top = 140.0
+offset_right = 580.0
+offset_bottom = 340.0
+color = Color(0.32, 0.62, 0.92, 1)
+
+[node name="Title" type="Label" parent="."]
+offset_left = 240.0
+offset_top = 160.0
+offset_right = 560.0
+offset_bottom = 200.0
+text = "Godotion"
+
+[node name="MotionPlayer" type="Node" parent="."]
+script = ExtResource("1_player")
+root_node = NodePath("..")
+autoplay = true
